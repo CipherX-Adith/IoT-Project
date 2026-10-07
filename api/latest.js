@@ -27,7 +27,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(`${dbUrl}/readings.json${auth}?orderBy="$key"&limitToLast=1`);
+    const separator = auth ? '&' : '?';
+    const response = await fetch(`${dbUrl}/readings.json${auth}${separator}orderBy="$key"&limitToLast=1`);
     if (!response.ok) {
       throw new Error(`Firebase responded with status ${response.status}`);
     }

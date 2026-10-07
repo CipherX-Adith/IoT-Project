@@ -48,7 +48,7 @@ async function sendLocationTargetedAlert({
   const tag = risk === 'EXTREME' ? 'rotating_light,fire,pushpin' : 'warning,sun_with_face,pushpin';
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
 
-  const messageBody = 
+  const messageBody =
     `🚨 ${risk} UV RADIATION DETECTED!\n` +
     `📍 Location: ${locationName} [Node ${nodeId}]\n` +
     `📊 UV Index: ${Number(uvIndex).toFixed(1)} UVI | Intensity: ${Number(uvIntensity).toFixed(2)} mW/cm²\n` +
@@ -229,7 +229,11 @@ export default async function handler(req, res) {
     }
 
     try {
-      const response = await fetch(`${dbUrl}/readings.json${auth}?orderBy="$key"&limitToLast=50`);
+      const separator = auth ? '&' : '?';
+
+      const response = await fetch(
+        `${dbUrl}/readings.json${auth}${separator}orderBy="$key"&limitToLast=50`
+      );
       if (!response.ok) {
         throw new Error(`Firebase returned HTTP ${response.status}`);
       }
