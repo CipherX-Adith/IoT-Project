@@ -54,17 +54,12 @@ async function sendLocationTargetedAlert({
   };
 
   const priority = priorityMap[risk] || 'default';
-  const tag = risk === 'EXTREME' ? 'rotating_light,fire,pushpin' : 'warning,sun_with_face,pushpin';
-  // Use URL encoded coordinate string (%2C) so ntfy header parser doesn't split on comma
+  const tag = risk === 'EXTREME' ? 'rotating_light' : 'warning';
   const encodedCoords = `${encodeURIComponent(`${latitude},${longitude}`)}`;
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodedCoords}`;
 
-  const messageBody =
-    `🚨 ${risk} UV RADIATION DETECTED!\n` +
-    `📍 Location: ${locationName} [Node ${nodeId}]\n` +
-    `📊 UV Index: ${Number(uvIndex).toFixed(1)} UVI | Intensity: ${Number(uvIntensity).toFixed(2)} mW/cm²\n` +
-    `🎯 Alert Perimeter: ${alertRadius}m surrounding (${latitude.toFixed(4)}, ${longitude.toFixed(4)})\n` +
-    `⚠️ Individuals within this radius must seek shade and apply maximum UV protection immediately.`;
+  const alertTitle = `SUNSHIELD: ${risk} UV DETECTED`;
+  const messageBody = `${risk} UV (${Number(uvIndex).toFixed(1)} UVI) detected at ${locationName}. Please seek shade if you are within ${alertRadius}m.`;
 
   const notificationResult = {
     attempted: true,
@@ -82,11 +77,10 @@ async function sendLocationTargetedAlert({
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        'Title': `[${locationName}] ${risk} UV Hazard Alert`,
+        'Title': alertTitle,
         'Priority': priority,
         'Tags': tag,
-        'Click': mapUrl,
-        'Actions': `view, View Zone on Map, ${mapUrl}, clear=true`
+        'Click': mapUrl
       },
       body: messageBody
     });
