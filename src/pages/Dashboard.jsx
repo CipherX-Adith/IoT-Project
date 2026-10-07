@@ -128,7 +128,7 @@ export default function Dashboard() {
       };
 
       syncTelemetry();
-      const interval = setInterval(syncTelemetry, 2500);
+      const interval = setInterval(syncTelemetry, 1500);
 
       return () => {
         isMounted = false;

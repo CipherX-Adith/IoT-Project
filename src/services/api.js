@@ -4,7 +4,7 @@ const API_BASE = '/api';
 
 export async function fetchHealth() {
   try {
-    const res = await fetch(`${API_BASE}/health`);
+    const res = await fetch(`${API_BASE}/health`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   } catch (err) {
@@ -15,7 +15,7 @@ export async function fetchHealth() {
 
 export async function fetchLatestReading() {
   try {
-    const res = await fetch(`${API_BASE}/latest`);
+    const res = await fetch(`${API_BASE}/latest?_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   } catch (err) {
@@ -26,7 +26,7 @@ export async function fetchLatestReading() {
 
 export async function fetchReadings() {
   try {
-    const res = await fetch(`${API_BASE}/readings`);
+    const res = await fetch(`${API_BASE}/readings?_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   } catch (err) {
@@ -37,7 +37,7 @@ export async function fetchReadings() {
 
 export async function fetchNodes() {
   try {
-    const res = await fetch(`${API_BASE}/nodes`);
+    const res = await fetch(`${API_BASE}/nodes?_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   } catch (err) {
