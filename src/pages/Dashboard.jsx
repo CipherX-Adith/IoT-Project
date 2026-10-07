@@ -14,6 +14,7 @@ import {
   subscribeToNodes,
   subscribeToAlerts
 } from '../services/firebase';
+import { fetchReadings, fetchNodes } from '../services/api';
 import { getRiskFromUvi } from '../utils/risk';
 import { formatUvIndex, formatUvIntensity } from '../utils/format';
 
@@ -55,40 +56,85 @@ export default function Dashboard() {
 
   const firebaseReady = isFirebaseConfigured();
 
-  // Attach live real-time Firebase listeners
+  // Attach live real-time Firebase listeners or HTTP API polling fallback
   useEffect(() => {
-    if (!firebaseReady) return;
+    if (firebaseReady) {
+      const unsubReadings = subscribeToReadings((data) => {
+        if (data) {
+          setReadings(data);
+        }
+      });
 
-    const unsubReadings = subscribeToReadings((data) => {
-      if (data) {
-        setReadings(data);
-      }
-    });
+      const unsubNodes = subscribeToNodes((data) => {
+        if (data && data.length > 0) {
+          setNodes((prev) => {
+            const customLoc = localStorage.getItem(SAVED_LOCATION_KEY);
+            if (customLoc) {
+              const parsed = JSON.parse(customLoc);
+              return data.map((n) => (n.id === 'SS-001' ? { ...n, ...parsed } : n));
+            }
+            return data;
+          });
+        }
+      });
 
-    const unsubNodes = subscribeToNodes((data) => {
-      if (data && data.length > 0) {
-        setNodes((prev) => {
-          const customLoc = localStorage.getItem(SAVED_LOCATION_KEY);
-          if (customLoc) {
-            const parsed = JSON.parse(customLoc);
-            return data.map((n) => (n.id === 'SS-001' ? { ...n, ...parsed } : n));
+      const unsubAlerts = subscribeToAlerts((data) => {
+        if (data) {
+          setAlerts(data);
+        }
+      });
+
+      return () => {
+        unsubReadings();
+        unsubNodes();
+        unsubAlerts();
+      };
+    } else {
+      let isMounted = true;
+
+      const syncTelemetry = async () => {
+        try {
+          const [readingsRes, nodesRes] = await Promise.all([
+            fetchReadings(),
+            fetchNodes()
+          ]);
+
+          if (!isMounted) return;
+
+          if (readingsRes && readingsRes.success && Array.isArray(readingsRes.readings)) {
+            setReadings(readingsRes.readings);
+
+            const highRiskAlerts = readingsRes.readings
+              .filter((r) => r.risk === 'EXTREME' || r.risk === 'HIGH' || Number(r.uvIndex || 0) >= 6)
+              .slice(0, 10);
+            if (highRiskAlerts.length > 0) {
+              setAlerts(highRiskAlerts);
+            }
           }
-          return data;
-        });
-      }
-    });
 
-    const unsubAlerts = subscribeToAlerts((data) => {
-      if (data) {
-        setAlerts(data);
-      }
-    });
+          if (nodesRes && nodesRes.success && Array.isArray(nodesRes.nodes) && nodesRes.nodes.length > 0) {
+            setNodes((prev) => {
+              const customLoc = localStorage.getItem(SAVED_LOCATION_KEY);
+              if (customLoc) {
+                const parsed = JSON.parse(customLoc);
+                return nodesRes.nodes.map((n) => (n.id === 'SS-001' ? { ...n, ...parsed } : n));
+              }
+              return nodesRes.nodes;
+            });
+          }
+        } catch (err) {
+          console.warn('Telemetry polling error:', err);
+        }
+      };
 
-    return () => {
-      unsubReadings();
-      unsubNodes();
-      unsubAlerts();
-    };
+      syncTelemetry();
+      const interval = setInterval(syncTelemetry, 2500);
+
+      return () => {
+        isMounted = false;
+        clearInterval(interval);
+      };
+    }
   }, [firebaseReady]);
 
   const handleUpdateLocation = (newLoc) => {
