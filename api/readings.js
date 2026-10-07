@@ -35,8 +35,17 @@ async function sendLocationTargetedAlert({
   longitude,
   alertRadius
 }) {
-  const baseTopic = process.env.NTFY_TOPIC;
-  if (!baseTopic) return;
+  const rawTopic = process.env.NTFY_TOPIC || process.env.VITE_NTFY_TOPIC || '';
+  const baseTopic = rawTopic.trim();
+
+  if (!baseTopic) {
+    console.warn('[NTFY] Skipped: NTFY_TOPIC environment variable is not configured.');
+    return {
+      attempted: false,
+      topicConfigured: false,
+      error: 'NTFY_TOPIC environment variable not configured'
+    };
+  }
 
   const priorityMap = {
     'HIGH': 'default',
@@ -46,7 +55,9 @@ async function sendLocationTargetedAlert({
 
   const priority = priorityMap[risk] || 'default';
   const tag = risk === 'EXTREME' ? 'rotating_light,fire,pushpin' : 'warning,sun_with_face,pushpin';
-  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+  // Use URL encoded coordinate string (%2C) so ntfy header parser doesn't split on comma
+  const encodedCoords = `${encodeURIComponent(`${latitude},${longitude}`)}`;
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodedCoords}`;
 
   const messageBody =
     `🚨 ${risk} UV RADIATION DETECTED!\n` +
@@ -55,9 +66,20 @@ async function sendLocationTargetedAlert({
     `🎯 Alert Perimeter: ${alertRadius}m surrounding (${latitude.toFixed(4)}, ${longitude.toFixed(4)})\n` +
     `⚠️ Individuals within this radius must seek shade and apply maximum UV protection immediately.`;
 
-  // Send to main broadcast topic
+  const notificationResult = {
+    attempted: true,
+    topicConfigured: true,
+    topic: baseTopic,
+    primary: null,
+    nodeTopic: null
+  };
+
+  // 1. Send to main broadcast topic
   try {
-    await fetch(`https://ntfy.sh/${baseTopic}`, {
+    const endpoint = `https://ntfy.sh/${baseTopic}`;
+    console.log(`[NTFY] Dispatching alert to ${endpoint} with priority=${priority}...`);
+
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Title': `[${locationName}] ${risk} UV Hazard Alert`,
@@ -68,15 +90,32 @@ async function sendLocationTargetedAlert({
       },
       body: messageBody
     });
+
+    const responseText = await response.text();
+    console.log(`[NTFY] STATUS: ${response.status} ${response.statusText}`);
+    console.log(`[NTFY] RESPONSE:`, responseText);
+
+    notificationResult.primary = {
+      status: response.status,
+      ok: response.ok,
+      statusText: response.statusText,
+      response: responseText
+    };
   } catch (err) {
-    console.error('Failed to dispatch primary ntfy alert:', err);
+    console.error('[NTFY] Network exception dispatching primary ntfy alert:', err);
+    notificationResult.primary = {
+      ok: false,
+      error: err.message
+    };
   }
 
-  // Also broadcast to location/node specific channel (e.g. sunshield-alerts-ss-001)
-  const nodeTopic = `${baseTopic}-${String(nodeId).toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
-  if (nodeTopic !== baseTopic) {
+  // 2. Also broadcast to location/node specific channel (e.g. sunshield-alerts-ss-001)
+  const sanitizedNode = String(nodeId).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const nodeTopic = `${baseTopic}-${sanitizedNode}`;
+  if (sanitizedNode && nodeTopic !== baseTopic) {
     try {
-      await fetch(`https://ntfy.sh/${nodeTopic}`, {
+      const nodeEndpoint = `https://ntfy.sh/${nodeTopic}`;
+      const nodeRes = await fetch(nodeEndpoint, {
         method: 'POST',
         headers: {
           'Title': `[LOCAL ZONE: ${locationName}] ${risk} UV Alert`,
@@ -86,10 +125,22 @@ async function sendLocationTargetedAlert({
         },
         body: messageBody
       });
+      const nodeText = await nodeRes.text();
+      notificationResult.nodeTopic = {
+        topic: nodeTopic,
+        status: nodeRes.status,
+        ok: nodeRes.ok
+      };
     } catch (err) {
-      // Non-critical local topic dispatch
+      notificationResult.nodeTopic = {
+        topic: nodeTopic,
+        ok: false,
+        error: err.message
+      };
     }
   }
+
+  return notificationResult;
 }
 
 export default async function handler(req, res) {
@@ -190,8 +241,13 @@ export default async function handler(req, res) {
       }
 
       // 4. Trigger location-targeted notification via ntfy
+      let notificationResult = {
+        attempted: false,
+        reason: 'Risk level does not exceed threshold (LOW/MODERATE)'
+      };
+
       if (['HIGH', 'VERY HIGH', 'EXTREME'].includes(risk)) {
-        await sendLocationTargetedAlert({
+        notificationResult = await sendLocationTargetedAlert({
           nodeId,
           locationName,
           risk,
@@ -207,7 +263,8 @@ export default async function handler(req, res) {
         success: true,
         message: 'Location telemetry processed successfully',
         reading: readingData,
-        firebasePersisted: Boolean(dbUrl && firebaseResult)
+        firebasePersisted: Boolean(dbUrl && firebaseResult),
+        notification: notificationResult
       });
     } catch (error) {
       console.error('Error processing location telemetry:', error);
