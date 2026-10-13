@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { formatRelativeTime } from '../utils/format';
 import { getRiskLevelByName } from '../utils/risk';
 import { calculateDistanceMeters, isWithinPerimeter, formatDistance } from '../utils/geo';
+import RealtimeDeploymentMap from './RealtimeDeploymentMap';
 import { MapPin, Navigation, Radio, ExternalLink, ShieldAlert, ShieldCheck, Crosshair, Edit3, Check, X, Bell } from 'lucide-react';
 
 export default function SessionStatsAndAlerts({
@@ -211,8 +212,10 @@ export default function SessionStatsAndAlerts({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="maps-link-tag font-mono"
+                title="Open live location in Google Maps"
               >
-                <span>MAP</span>
+                <MapPin size={11} />
+                <span>MAP VIEW</span>
                 <ExternalLink size={10} />
               </a>
             </div>
@@ -221,6 +224,18 @@ export default function SessionStatsAndAlerts({
               <span>{Number(latitude).toFixed(4)}° N, {Number(longitude).toFixed(4)}° E</span>
               <span className="radius-chip">RADIUS: {alertRadius}M</span>
             </div>
+
+            {/* Real-Time Interactive Deployment Map */}
+            <RealtimeDeploymentMap
+              latitude={Number(latitude)}
+              longitude={Number(longitude)}
+              alertRadius={Number(alertRadius)}
+              locationName={locationName}
+              userCoords={userCoords}
+              isElevatedRisk={isElevatedRisk}
+              currentUvi={currentUvi}
+              isUserInsidePerimeter={isUserInsidePerimeter}
+            />
 
             {/* Proximity Checker */}
             <div className="proximity-dark-strip font-mono">

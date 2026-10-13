@@ -22,8 +22,51 @@ import { Sun, Activity, TrendingUp, MapPin, AlertTriangle } from 'lucide-react';
 
 const SAVED_LOCATION_KEY = 'sunshield_custom_location';
 
+const getInitialReadings = () => {
+  const now = Date.now();
+  const uviSequence = [
+    1.2, 1.5, 1.8, 2.2, 2.7, 3.1, 3.5, 4.0, 4.4, 4.9, 
+    5.2, 5.5, 6.0, 6.5, 7.0, 7.4, 7.8, 8.1, 8.4
+  ];
+  return uviSequence.map((uvi, index) => {
+    const timeOffset = (uviSequence.length - 1 - index) * 120000;
+    const intensity = Number(((uvi * 15.0) / 40.0).toFixed(2));
+    const risk = uvi < 3 ? 'LOW' : uvi < 6 ? 'MODERATE' : uvi < 8 ? 'HIGH' : uvi < 11 ? 'VERY HIGH' : 'EXTREME';
+    return {
+      id: `sim-${index}`,
+      nodeId: 'SS-001',
+      locationName: 'College Ground / Campus Field',
+      latitude: 10.063,
+      longitude: 76.326,
+      alertRadius: 300,
+      uvIndex: uvi,
+      uvIntensity: intensity,
+      risk,
+      timestamp: now - timeOffset
+    };
+  }).reverse();
+};
+
+const getInitialAlerts = (initialList) => {
+  return initialList
+    .filter((r) => ['HIGH', 'VERY HIGH', 'EXTREME'].includes(r.risk))
+    .map((r, i) => ({
+      id: `alert-${i}`,
+      nodeId: r.nodeId,
+      locationName: r.locationName,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      alertRadius: r.alertRadius,
+      risk: r.risk,
+      uvIndex: r.uvIndex,
+      message: `${r.risk} UV detected in ${r.locationName} (${r.uvIndex.toFixed(1)} UVI)`,
+      timestamp: r.timestamp
+    }));
+};
+
 export default function Dashboard() {
-  const [readings, setReadings] = useState([]);
+  const initialReadingsList = getInitialReadings();
+  const [readings, setReadings] = useState(initialReadingsList);
   
   const getInitialNode = () => {
     try {
@@ -34,6 +77,9 @@ export default function Dashboard() {
           name: 'SunShield Wokwi Node',
           status: 'ONLINE',
           lastSeen: Date.now(),
+          lastUvIndex: 8.4,
+          lastUvIntensity: 3.15,
+          lastRisk: 'VERY HIGH',
           ...JSON.parse(saved)
         };
       }
@@ -47,12 +93,15 @@ export default function Dashboard() {
       longitude: 76.326,
       alertRadius: 300,
       status: 'ONLINE',
-      lastSeen: Date.now()
+      lastSeen: Date.now(),
+      lastUvIndex: 8.4,
+      lastUvIntensity: 3.15,
+      lastRisk: 'VERY HIGH'
     };
   };
 
   const [nodes, setNodes] = useState([getInitialNode()]);
-  const [alerts, setAlerts] = useState([]);
+  const [alerts, setAlerts] = useState(getInitialAlerts(initialReadingsList));
 
   const firebaseReady = isFirebaseConfigured();
 
@@ -101,7 +150,7 @@ export default function Dashboard() {
 
           if (!isMounted) return;
 
-          if (readingsRes && readingsRes.success && Array.isArray(readingsRes.readings)) {
+          if (readingsRes && readingsRes.success && Array.isArray(readingsRes.readings) && readingsRes.readings.length > 0) {
             setReadings(readingsRes.readings);
 
             const highRiskAlerts = readingsRes.readings
@@ -128,7 +177,7 @@ export default function Dashboard() {
       };
 
       syncTelemetry();
-      const interval = setInterval(syncTelemetry, 1500);
+      const interval = setInterval(syncTelemetry, 3500);
 
       return () => {
         isMounted = false;
